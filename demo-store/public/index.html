@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>DummyMart — Paygate test store</title>
+    <link rel="stylesheet" href="/styles.css" />
+    <!-- Razorpay Checkout (drives the inline payment UI). -->
+    <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">🛒 DummyMart</div>
+      <div class="tag">Paygate gateway test store</div>
+      <button id="cartBtn" class="cart-btn">Cart <span id="cartCount" class="badge">0</span></button>
+    </header>
+
+    <main>
+      <section class="hero">
+        <h1>Shop &amp; pay like a real customer</h1>
+        <p>
+          This is a self-contained dummy store wired to the Paygate gateway. Add items,
+          check out, and complete a payment to test the full pay-in flow end to end.
+        </p>
+      </section>
+
+      <section id="products" class="grid"></section>
+    </main>
+
+    <!-- Cart / checkout drawer -->
+    <aside id="drawer" class="drawer">
+      <div class="drawer-head">
+        <h2>Your cart</h2>
+        <button id="closeDrawer" class="icon-btn">✕</button>
+      </div>
+
+      <div id="cartItems" class="cart-items"></div>
+
+      <div class="cart-total">
+        <span>Total</span>
+        <strong id="cartTotal">₹0.00</strong>
+      </div>
+
+      <form id="checkoutForm" class="checkout-form">
+        <h3>Customer details</h3>
+        <label>
+          Full name
+          <input name="customerName" type="text" value="Alice Kumar" required />
+        </label>
+        <label>
+          Mobile number
+          <input
+            name="customerPhone"
+            type="tel"
+            value="9876543210"
+            pattern="[6-9][0-9]{9}"
+            title="10-digit Indian mobile number"
+            required
+          />
+        </label>
+        <button id="payBtn" type="submit" class="pay-btn" disabled>Pay ₹0.00</button>
+        <p id="formMsg" class="form-msg"></p>
+      </form>
+    </aside>
+    <div id="overlay" class="overlay"></div>
+
+    <script src="/store.js"></script>
+  </body>
+</html>

@@ -1,0 +1,230 @@
+.swal-container {
+  z-index: 12000 !important;
+}
+
+.swal-popup {
+  width: min(92vw, 440px) !important;
+  max-width: 92vw !important;
+  padding: 24px 22px 18px !important;
+  border-radius: 14px !important;
+  border: 1px solid transparent !important;
+  box-shadow: 0 18px 40px rgba(2, 6, 23, 0.28) !important;
+  font-family: inherit !important;
+}
+
+.swal-theme-dark.swal-popup {
+  background: #0f172a !important;
+  border-color: rgba(148, 163, 184, 0.2) !important;
+  color: #dbeafe !important;
+}
+
+.swal-theme-light.swal-popup {
+  background: #ffffff !important;
+  border-color: rgba(15, 23, 42, 0.12) !important;
+  color: #0f172a !important;
+}
+
+.swal-title {
+  font-size: clamp(1.05rem, 2.8vw, 1.25rem) !important;
+  font-weight: 700 !important;
+  padding: 0 !important;
+  margin: 0 0 10px !important;
+  line-height: 1.35 !important;
+}
+
+.swal-title--centered {
+  text-align: center !important;
+  width: 100% !important;
+}
+
+.swal-popup--success {
+  text-align: center !important;
+}
+
+.swal-html--centered {
+  text-align: center !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  min-height: 56px !important;
+  padding: 4px 12px 0 !important;
+}
+
+.swal-success-message {
+  margin: 0;
+  text-align: center;
+  font-size: clamp(0.92rem, 2.5vw, 1rem);
+  line-height: 1.55;
+  font-weight: 500;
+}
+
+.swal-theme-dark .swal-success-message {
+  color: #cbd5e1;
+}
+
+.swal-theme-light .swal-success-message {
+  color: #334155;
+}
+
+.swal-html {
+  margin: 0 !important;
+  padding: 0 !important;
+  text-align: left !important;
+  font-size: clamp(0.88rem, 2.4vw, 0.95rem) !important;
+  line-height: 1.55 !important;
+}
+
+.swal-message {
+  margin: 0 0 8px;
+}
+
+.swal-submessage {
+  margin: 0;
+  font-size: 0.86rem;
+  opacity: 0.82;
+}
+
+.swal-theme-dark .swal-submessage {
+  color: #94a3b8;
+}
+
+.swal-theme-light .swal-submessage {
+  color: #475569;
+}
+
+.swal-merchant-name {
+  font-weight: 700;
+  color: #60a5fa;
+}
+
+.swal-theme-light .swal-merchant-name {
+  color: #2563eb;
+}
+
+.swal-textarea {
+  width: 100% !important;
+  margin-top: 14px !important;
+  min-height: 96px !important;
+  resize: vertical !important;
+  border-radius: 10px !important;
+  border: 1px solid transparent !important;
+  padding: 10px 12px !important;
+  font-size: 0.9rem !important;
+  line-height: 1.45 !important;
+  font-family: inherit !important;
+  box-sizing: border-box !important;
+}
+
+.swal-theme-dark .swal-textarea {
+  background: rgba(15, 23, 42, 0.75) !important;
+  border-color: rgba(148, 163, 184, 0.2) !important;
+  color: #dbeafe !important;
+}
+
+.swal-theme-light .swal-textarea {
+  background: #ffffff !important;
+  border-color: rgba(15, 23, 42, 0.12) !important;
+  color: #0f172a !important;
+}
+
+.swal-textarea:focus {
+  outline: 2px solid rgba(37, 99, 235, 0.35) !important;
+  outline-offset: 1px !important;
+}
+
+.swal-actions {
+  width: 100% !important;
+  margin: 18px 0 0 !important;
+  padding: 0 !important;
+  gap: 10px !important;
+  flex-wrap: wrap !important;
+  justify-content: stretch !important;
+}
+
+.swal-btn {
+  flex: 1 1 140px;
+  min-height: 42px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0 16px;
+  transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+
+.swal-btn-cancel {
+  background: transparent;
+}
+
+.swal-theme-dark .swal-btn-cancel {
+  border-color: rgba(148, 163, 184, 0.25);
+  color: #cbd5e1;
+}
+
+.swal-theme-dark .swal-btn-cancel:hover {
+  background: rgba(148, 163, 184, 0.12);
+}
+
+.swal-theme-light .swal-btn-cancel {
+  border-color: rgba(15, 23, 42, 0.15);
+  color: #334155;
+}
+
+.swal-theme-light .swal-btn-cancel:hover {
+  background: rgba(15, 23, 42, 0.05);
+}
+
+.swal-btn-approve {
+  background: linear-gradient(135deg, #2563eb, #1d4ed8);
+  color: #eff6ff;
+  border-color: rgba(37, 99, 235, 0.45);
+}
+
+.swal-btn-approve:hover {
+  background: linear-gradient(135deg, #1d4ed8, #1e40af);
+}
+
+.swal-btn-reject {
+  background: linear-gradient(135deg, #dc2626, #b91c1c);
+  color: #fff1f2;
+  border-color: rgba(220, 38, 38, 0.45);
+}
+
+.swal-btn-reject:hover {
+  background: linear-gradient(135deg, #b91c1c, #991b1b);
+}
+
+.swal-validation {
+  font-size: 0.84rem !important;
+  margin-top: 8px !important;
+}
+
+.swal2-icon {
+  margin: 8px auto 14px !important;
+  transform: scale(0.92);
+}
+
+@media (max-width: 480px) {
+  .swal-popup {
+    width: calc(100vw - 20px) !important;
+    max-width: calc(100vw - 20px) !important;
+    padding: 20px 16px 16px !important;
+    border-radius: 12px !important;
+  }
+
+  .swal-actions {
+    flex-direction: column-reverse !important;
+    gap: 8px !important;
+  }
+
+  .swal-btn {
+    flex: 1 1 auto;
+    width: 100%;
+    min-height: 44px;
+  }
+
+  .swal2-icon {
+    transform: scale(0.85);
+  }
+}

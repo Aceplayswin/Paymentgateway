@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Payment result — DummyMart</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="result-wrap" id="resultWrap">
+      <div class="result-icon" id="icon">⏳</div>
+      <h1 id="title">Checking payment…</h1>
+      <p class="muted" id="subtitle">Fetching the latest status from Paygate.</p>
+      <div class="kv" id="details" style="display: none"></div>
+      <a class="back-btn" href="/">Back to store</a>
+    </div>
+
+    <script>
+      const params = new URLSearchParams(location.search);
+      const orderId = params.get("orderId");
+      const inr = (n) => `₹${Number(n).toFixed(2)}`;
+
+      const icon = document.getElementById("icon");
+      const title = document.getElementById("title");
+      const subtitle = document.getElementById("subtitle");
+      const details = document.getElementById("details");
+
+      const VIEW = {
+        success: { icon: "✅", title: "Payment successful", sub: "Thanks! Your order is confirmed." },
+        pending: { icon: "⏳", title: "Payment pending", sub: "We haven't received confirmation yet." },
+        failed: { icon: "❌", title: "Payment failed", sub: "The payment didn't go through." },
+      };
+
+      function render(order) {
+        const view = VIEW[order.status] || VIEW.pending;
+        icon.textContent = view.icon;
+        title.textContent = view.title;
+        subtitle.textContent = view.sub;
+
+        const pill = `<span class="status-pill status-${order.status}">${order.status.toUpperCase()}</span>`;
+        details.style.display = "block";
+        details.innerHTML = `
+          <div><span>Order ID</span><strong>${order.orderId}</strong></div>
+          <div><span>Amount</span><strong>${inr(order.amount)}</strong></div>
+          <div><span>Customer</span><strong>${order.customer?.name || "-"}</strong></div>
+          <div><span>Status</span>${pill}</div>
+          ${order.utr ? `<div><span>UTR</span><strong>${order.utr}</strong></div>` : ""}
+          ${order.byteTransactionId ? `<div><span>Ref</span><strong>${order.byteTransactionId}</strong></div>` : ""}
+        `;
+      }
+
+      async function poll(attempt = 0) {
+        if (!orderId) {
+          title.textContent = "No order specified";
+          subtitle.textContent = "";
+          return;
+        }
+        try {
+          const res = await fetch(`/api/order/${encodeURIComponent(orderId)}`);
+          const data = await res.json();
+          if (data.success) {
+            render(data.order);
+            // Re-poll a few times while still pending (webhook may be in-flight).
+            if (data.order.status === "pending" && attempt < 6) {
+              setTimeout(() => poll(attempt + 1), 2500);
+            }
+            return;
+          }
+          title.textContent = data.message || "Order not found";
+          subtitle.textContent = "";
+        } catch (err) {
+          subtitle.textContent = "Could not reach the store. Retrying…";
+          if (attempt < 6) setTimeout(() => poll(attempt + 1), 2500);
+        }
+      }
+
+      poll();
+    </script>
+  </body>
+</html>

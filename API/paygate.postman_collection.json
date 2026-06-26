@@ -1,0 +1,742 @@
+{
+  "info": {
+    "name": "Ultraconic API",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Complete API collection for Ultraconic PG. Import this file into Postman. Set the `baseUrl` collection variable to your server (default: http://localhost:3000)."
+  },
+  "variable": [
+    { "key": "baseUrl",       "value": "http://localhost:3000" },
+    { "key": "accessToken",   "value": "" },
+    { "key": "refreshToken",  "value": "" },
+    { "key": "otpSessionId",  "value": "" },
+    { "key": "merchantId",    "value": "" },
+    { "key": "transactionId", "value": "" },
+    { "key": "payoutId",      "value": "" }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "(async () => {",
+          "  const requestPath = pm.request.url.getPath();",
+          "  const publicPaths = ['/api/auth/login', '/api/auth/register', '/api/auth/refresh', '/api/auth/verify-otp', '/api/auth/verify-registration-otp', '/api/auth/resend-otp', '/api/auth/forgot-password', '/api/auth/verify-reset-otp', '/api/auth/reset-password'];",
+          "  if (publicPaths.some((path) => requestPath.includes(path))) {",
+          "    return;",
+          "  }",
+          "",
+          "  const accessToken = pm.collectionVariables.get('accessToken');",
+          "  const refreshToken = pm.collectionVariables.get('refreshToken');",
+          "",
+          "  const isExpired = (token) => {",
+          "    if (!token) return true;",
+          "    try {",
+          "      const payload = JSON.parse(atob(token.split('.')[1]));",
+          "      const now = Math.floor(Date.now() / 1000);",
+          "      return !payload.exp || payload.exp <= now + 30;",
+          "    } catch (error) {",
+          "      return true;",
+          "    }",
+          "  };",
+          "",
+          "  if (!refreshToken || !isExpired(accessToken)) {",
+          "    return;",
+          "  }",
+          "",
+          "  const baseUrl = pm.collectionVariables.get('baseUrl');",
+          "  const refreshResponse = await pm.sendRequest({",
+          "    url: `${baseUrl}/api/auth/refresh`,",
+          "    method: 'POST',",
+          "    header: { 'Content-Type': 'application/json' },",
+          "    body: {",
+          "      mode: 'raw',",
+          "      raw: JSON.stringify({ refreshToken })",
+          "    }",
+          "  });",
+          "",
+          "  if (refreshResponse.code === 200) {",
+          "    const json = refreshResponse.json();",
+          "    if (json.data && json.data.accessToken) {",
+          "      pm.collectionVariables.set('accessToken', json.data.accessToken);",
+          "    }",
+          "  }",
+          "})();"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Register Merchant",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/auth/register", "host": ["{{baseUrl}}"], "path": ["api", "auth", "register"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstName\": \"John\",\n  \"lastName\": \"Doe\",\n  \"email\": \"john.doe@example.com\",\n  \"phoneNumber\": \"9876543210\",\n  \"password\": \"Test@1234\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Verify Registration OTP",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/auth/verify-registration-otp", "host": ["{{baseUrl}}"], "path": ["api", "auth", "verify-registration-otp"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"john.doe@example.com\",\n  \"otp\": \"123456\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Verify OTP & Complete Signup",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json.data && json.data.otpSessionId) {",
+                  "  pm.collectionVariables.set('otpSessionId', json.data.otpSessionId);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/auth/verify-otp", "host": ["{{baseUrl}}"], "path": ["api", "auth", "verify-otp"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"otpSessionId\": \"{{otpSessionId}}\",\n  \"otp\": \"123456\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Resend OTP",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/auth/resend-otp", "host": ["{{baseUrl}}"], "path": ["api", "auth", "resend-otp"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"otpSessionId\": \"{{otpSessionId}}\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Login (Merchant)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json.data && json.data.accessToken) {",
+                  "  pm.collectionVariables.set('accessToken', json.data.accessToken);",
+                  "}",
+                  "if (json.data && json.data.refreshToken) {",
+                  "  pm.collectionVariables.set('refreshToken', json.data.refreshToken);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/auth/login", "host": ["{{baseUrl}}"], "path": ["api", "auth", "login"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"urban.cart@example.com\",\n  \"password\": \"Test@1234\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Login (Admin)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json.data && json.data.accessToken) {",
+                  "  pm.collectionVariables.set('accessToken', json.data.accessToken);",
+                  "}",
+                  "if (json.data && json.data.refreshToken) {",
+                  "  pm.collectionVariables.set('refreshToken', json.data.refreshToken);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/auth/login", "host": ["{{baseUrl}}"], "path": ["api", "auth", "login"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@paygate.com\",\n  \"password\": \"Test@1234\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Refresh Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json.data && json.data.accessToken) {",
+                  "  pm.collectionVariables.set('accessToken', json.data.accessToken);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/auth/refresh", "host": ["{{baseUrl}}"], "path": ["api", "auth", "refresh"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Merchant",
+      "item": [
+        {
+          "name": "Submit Approval Request",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/auth/merchant/approval-request", "host": ["{{baseUrl}}"], "path": ["api", "auth", "merchant", "approval-request"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"john.doe@example.com\",\n  \"password\": \"Test@1234\",\n  \"note\": \"Requesting approval to onboard as a merchant.\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Get Approval Status",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/auth/merchant/approval-status", "host": ["{{baseUrl}}"], "path": ["api", "auth", "merchant", "approval-status"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"urban.cart@example.com\",\n  \"password\": \"Test@1234\"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin",
+      "item": [
+        {
+          "name": "Get All Merchant Accounts",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": { "raw": "{{baseUrl}}/api/auth/admin/merchants/accounts", "host": ["{{baseUrl}}"], "path": ["api", "auth", "admin", "merchants", "accounts"] }
+          }
+        },
+        {
+          "name": "Get Pending Merchants",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": { "raw": "{{baseUrl}}/api/auth/admin/merchants/pending", "host": ["{{baseUrl}}"], "path": ["api", "auth", "admin", "merchants", "pending"] }
+          }
+        },
+        {
+          "name": "Get Approved Merchants",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": { "raw": "{{baseUrl}}/api/auth/admin/merchants/approved", "host": ["{{baseUrl}}"], "path": ["api", "auth", "admin", "merchants", "approved"] }
+          }
+        },
+        {
+          "name": "Get Merchant Approval Requests (by status)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/admin/merchants/requests?status=pending",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "admin", "merchants", "requests"],
+              "query": [
+                { "key": "status", "value": "pending", "description": "pending | approved | rejected | all" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Single Merchant Approval Request",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": { "raw": "{{baseUrl}}/api/auth/admin/merchants/{{merchantId}}", "host": ["{{baseUrl}}"], "path": ["api", "auth", "admin", "merchants", "{{merchantId}}"] }
+          }
+        },
+        {
+          "name": "Approve Merchant",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": { "raw": "{{baseUrl}}/api/auth/admin/merchants/{{merchantId}}/approve", "host": ["{{baseUrl}}"], "path": ["api", "auth", "admin", "merchants", "{{merchantId}}", "approve"] }
+          }
+        },
+        {
+          "name": "Reject Merchant",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": { "raw": "{{baseUrl}}/api/auth/admin/merchants/{{merchantId}}/reject", "host": ["{{baseUrl}}"], "path": ["api", "auth", "admin", "merchants", "{{merchantId}}", "reject"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Incomplete documentation provided.\"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Transactions - Payin",
+      "item": [
+        {
+          "name": "List Payin Transactions",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/transactions/payin?page=1&limit=20&status=pending",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "transactions", "payin"],
+              "query": [
+                { "key": "page",   "value": "1" },
+                { "key": "limit",  "value": "20" },
+                { "key": "status", "value": "pending", "description": "pending | success | failed | refunded" },
+                { "key": "search", "value": "", "disabled": true },
+                { "key": "userId", "value": "", "disabled": true, "description": "Admin only" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Payin Transaction",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": { "raw": "{{baseUrl}}/api/transactions/payin/{{transactionId}}", "host": ["{{baseUrl}}"], "path": ["api", "transactions", "payin", "{{transactionId}}"] }
+          }
+        },
+        {
+          "name": "Create Payin Transaction",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json.data && json.data.transactionId) {",
+                  "  pm.collectionVariables.set('transactionId', json.data.transactionId);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": { "raw": "{{baseUrl}}/api/transactions/payin", "host": ["{{baseUrl}}"], "path": ["api", "transactions", "payin"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orderId\": \"ORD-001\",\n  \"customerName\": \"Alice Kumar\",\n  \"amount\": 1500.00,\n  \"paymentMethod\": \"UPI\",\n  \"status\": \"pending\",\n  \"dateTime\": \"2026-06-06T10:00:00Z\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Update Payin Transaction",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": { "raw": "{{baseUrl}}/api/transactions/payin/{{transactionId}}", "host": ["{{baseUrl}}"], "path": ["api", "transactions", "payin", "{{transactionId}}"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"success\"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Transactions - Payout",
+      "item": [
+        {
+          "name": "List Payout Transactions",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/transactions/payout?page=1&limit=20&status=pending",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "transactions", "payout"],
+              "query": [
+                { "key": "page",   "value": "1" },
+                { "key": "limit",  "value": "20" },
+                { "key": "status", "value": "pending", "description": "pending | processing | success | failed | processed" },
+                { "key": "search", "value": "", "disabled": true },
+                { "key": "userId", "value": "", "disabled": true, "description": "Admin only" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Payout Transaction",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": { "raw": "{{baseUrl}}/api/transactions/payout/{{payoutId}}", "host": ["{{baseUrl}}"], "path": ["api", "transactions", "payout", "{{payoutId}}"] }
+          }
+        },
+        {
+          "name": "Create Payout Transaction",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json.data && json.data.payoutId) {",
+                  "  pm.collectionVariables.set('payoutId', json.data.payoutId);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": { "raw": "{{baseUrl}}/api/transactions/payout", "host": ["{{baseUrl}}"], "path": ["api", "transactions", "payout"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"beneficiaryName\": \"Bob Sharma\",\n  \"bankDetails\": {\n    \"accountNumber\": \"123456789012\",\n    \"ifsc\": \"HDFC0001234\",\n    \"bankName\": \"HDFC Bank\"\n  },\n  \"amount\": 5000.00,\n  \"status\": \"pending\",\n  \"timestamp\": \"2026-06-06T10:00:00Z\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Update Payout Transaction",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": { "raw": "{{baseUrl}}/api/transactions/payout/{{payoutId}}", "host": ["{{baseUrl}}"], "path": ["api", "transactions", "payout", "{{payoutId}}"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"processing\"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Dashboard",
+      "item": [
+        {
+          "name": "Get Dashboard Summary (Platform Command Center)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/dashboard/summary",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "dashboard", "summary"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Payin",
+      "item": [
+        {
+          "name": "Transactions",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/payin/transactions?page=1&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "payin", "transactions"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" },
+                { "key": "status", "value": "success", "disabled": true },
+                { "key": "search", "value": "", "disabled": true }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Summary",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/payin/summary",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "payin", "summary"]
+            }
+          }
+        },
+        {
+          "name": "Refund Callbacks",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/payin/refund-callbacks?page=1&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "payin", "refund-callbacks"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Settlements",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/payin/settlements?page=1&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "payin", "settlements"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Sales Report",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/payin/sales-report",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "payin", "sales-report"]
+            }
+          }
+        },
+        {
+          "name": "Chargebacks & Liens",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/payin/chargebacks-liens?page=1&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "payin", "chargebacks-liens"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Complaints",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/payin/complaints?page=1&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "payin", "complaints"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Report Center",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/payin/reports",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "payin", "reports"]
+            }
+          }
+        },
+        {
+          "name": "Merchant Report",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/payin/merchant-report",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "payin", "merchant-report"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Reports",
+      "item": [
+        {
+          "name": "Report Center",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/reports/center",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "reports", "center"]
+            }
+          }
+        },
+        {
+          "name": "Sales Report",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/reports/sales",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "reports", "sales"]
+            }
+          }
+        },
+        {
+          "name": "Merchant Report",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/reports/merchant",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "reports", "merchant"]
+            }
+          }
+        },
+        {
+          "name": "Reports Summary (All Pages)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/reports/summary",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "reports", "summary"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Payout",
+      "item": [
+        {
+          "name": "Balance",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/payout/balance",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "payout", "balance"]
+            }
+          }
+        },
+        {
+          "name": "Transactions",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/payout/transactions?page=1&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "payout", "transactions"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Ledger",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/payout/ledger?page=1&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "payout", "ledger"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "IP Whitelist",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/payout/ip-whitelist?page=1&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "payout", "ip-whitelist"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

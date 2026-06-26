@@ -1,0 +1,16 @@
+{
+  "name": "dummymart-demo-store",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Standalone dummy merchant store to test the Paygate (Razorpay-backed white-label) payment gateway end-to-end as a normal user.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "axios": "^1.7.7",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.0"
+  }
+}

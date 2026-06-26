@@ -2,13 +2,10 @@ const parseAllowedOrigins = () => {
   const raw = process.env.CORS_ALLOWED_ORIGINS?.trim();
 
   if (!raw) {
-    return ["http://localhost:5173"];
+    return [];
   }
 
-  return raw
-    .split(",")
-    .map((origin) => origin.trim())
-    .filter(Boolean);
+  return raw.split(",").map((origin) => origin.trim()).filter(Boolean);
 };
 
 const getCorsOptions = () => {

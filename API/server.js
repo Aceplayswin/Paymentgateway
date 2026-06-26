@@ -6,7 +6,7 @@ const cookieParser = require('cookie-parser');
 const cors = require('cors');
 
 const pool = require('./config/db');
-const { getCorsOptions } = require('./config/cors');
+const { getCorsOptions, parseAllowedOrigins } = require('./config/cors');
 
 const authRoutes = require('./routes/user.routes');
 const transactionRoutes = require('./routes/transaction.routes');
@@ -23,6 +23,7 @@ const adminRoutes = require('./routes/admin.routes');
 const v1Routes = require('./routes/v1.routes');
 
 app.use(cors(getCorsOptions()));
+console.log('CORS allowed origins:', parseAllowedOrigins());
 
 // Public merchant API (/api/v1) is mounted BEFORE the global JSON parser so its
 // own parser can capture the raw request body for HMAC signature verification.

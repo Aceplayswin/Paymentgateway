@@ -172,7 +172,7 @@ app.get('/api/order/:orderId', async (req, res) => {
 });
 
 // Result landing page (redirect target after checkout).
-app.get('/result', (_req, res) => {
+app.get('/demo-store/result', (_req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'result.html'));
 });
 
@@ -181,4 +181,11 @@ app.listen(PORT, () => {
   console.log(`  Talking to Paygate API at:     ${paygate.API_URL}`);
   console.log(`  Gateway provider:              ${paygate.PROVIDER}`);
   console.log(`  Merchant API key:              ${paygate.KEY_ID || '(not set — see .env)'}\n`);
+});
+
+app.get('/demo-store', (_req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+app.get('/demo-store/', (_req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });

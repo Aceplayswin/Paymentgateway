@@ -23,7 +23,7 @@ app.use(express.json());
 // The gateway fires the merchant callback as x-www-form-urlencoded (see
 // API/controllers/payment/providers/merchantWebhook.js).
 app.use(express.urlencoded({ extended: true }));
-app.use(express.static(path.join(__dirname, 'public')));
+app.use('/demo-store', express.static(path.join(__dirname, 'public')));
 
 // --- in-memory order book (demo only) ---------------------------------------
 // orderId -> { orderId, amount, customer, status, byteTransactionId, ... }

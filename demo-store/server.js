@@ -23,6 +23,13 @@ app.use(express.json());
 // The gateway fires the merchant callback as x-www-form-urlencoded (see
 // API/controllers/payment/providers/merchantWebhook.js).
 app.use(express.urlencoded({ extended: true }));
+
+// The whole app lives under /demo-store (that's the path nginx forwards here and
+// the prefix every asset/API URL uses). Anyone landing on the bare root — a
+// local `http://localhost:4500` hit, or a stray `casypay.com/` that reaches this
+// server — gets bounced to the storefront instead of a blank "Cannot GET /".
+app.get('/', (_req, res) => res.redirect('/demo-store/'));
+
 app.use('/demo-store', express.static(path.join(__dirname, 'public')));
 
 // Serve the storefront landing page for both the bare and trailing-slash forms

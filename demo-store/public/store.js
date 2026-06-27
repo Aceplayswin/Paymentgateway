@@ -148,7 +148,7 @@ $("#checkoutForm").addEventListener("submit", async (e) => {
 
   let checkoutData;
   try {
-    checkoutData = await postJSON("/api/checkout", {
+    checkoutData = await postJSON("/demo-store/api/checkout", {
       customerName,
       customerPhone,
       amount: total,
@@ -183,7 +183,7 @@ $("#checkoutForm").addEventListener("submit", async (e) => {
     handler: async (response) => {
       setMsg("Verifying payment…", "ok");
       try {
-        await postJSON("/api/verify", {
+        await postJSON("/demo-store/api/verify", {
           orderId,
           byteTransactionId,
           razorpay_order_id: response.razorpay_order_id,
@@ -194,7 +194,7 @@ $("#checkoutForm").addEventListener("submit", async (e) => {
         // Verification failure is non-fatal; the result page re-checks status.
         console.warn("verify error:", err.message);
       }
-      window.location.href = `/result?orderId=${encodeURIComponent(orderId)}`;
+      window.location.href = `/demo-store/result?orderId=${encodeURIComponent(orderId)}`;
     },
     modal: {
       ondismiss: () => {

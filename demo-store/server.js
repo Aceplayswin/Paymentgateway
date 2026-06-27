@@ -25,6 +25,12 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use('/demo-store', express.static(path.join(__dirname, 'public')));
 
+// Serve the storefront landing page for both the bare and trailing-slash forms
+// of the mount path (the app is hosted under /demo-store, not the site root).
+app.get(['/demo-store', '/demo-store/'], (_req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
 // --- in-memory order book (demo only) ---------------------------------------
 // orderId -> { orderId, amount, customer, status, byteTransactionId, ... }
 const orders = new Map();
@@ -47,7 +53,7 @@ const toStoreStatus = (apiStatus) => {
 // 1) Checkout: the storefront posts the cart + customer details here. We create
 //    an order with the Paygate gateway (signed with our merchant API key) and
 //    hand the browser the hosted paymentUrl to pay on.
-app.post('/api/checkout', async (req, res) => {
+app.post('/demo-store/api/checkout', async (req, res) => {
   try {
     const { customerName, customerPhone, amount, items } = req.body || {};
     if (!customerName || !customerPhone || !(Number(amount) > 0)) {
@@ -57,7 +63,7 @@ app.post('/api/checkout', async (req, res) => {
     }
 
     const orderId = newOrderId();
-    const redirectUrl = `${STORE_BASE_URL}/result?orderId=${encodeURIComponent(orderId)}`;
+    const redirectUrl = `${STORE_BASE_URL}/demo-store/result?orderId=${encodeURIComponent(orderId)}`;
 
     const result = await paygate.initiatePayment({
       customerName,
@@ -101,7 +107,7 @@ app.post('/api/checkout', async (req, res) => {
 
 // 2) Verify: the browser hands back the Razorpay checkout result. We forward it
 //    to the gateway's public payment-verify endpoint and record the outcome.
-app.post('/api/verify', async (req, res) => {
+app.post('/demo-store/api/verify', async (req, res) => {
   try {
     const {
       orderId,
@@ -133,7 +139,7 @@ app.post('/api/verify', async (req, res) => {
 
 // 3) Server-to-server callback fired by the gateway on a confirmed payment.
 //    Body: order_id, status, remark1 (urlencoded). Best-effort: ack with 200.
-app.all('/api/paygate-callback', (req, res) => {
+app.all(['/demo-store/api/paygate-callback', '/api/paygate-callback'], (req, res) => {
   const orderId = req.body.order_id || req.query.order_id;
   const status = req.body.status || req.query.status;
   const utr = req.body.utr || req.query.utr;
@@ -151,7 +157,7 @@ app.all('/api/paygate-callback', (req, res) => {
 // 4) Status lookup for the result page. Falls back to a live gateway poll (signed
 //    with our merchant API key) if our local record is still pending — covers
 //    both hosted-page confirmation and webhook-driven confirmations.
-app.get('/api/order/:orderId', async (req, res) => {
+app.get('/demo-store/api/order/:orderId', async (req, res) => {
   const order = orders.get(req.params.orderId);
   if (!order) {
     return res.status(404).json({ success: false, message: 'Order not found.' });
@@ -181,11 +187,4 @@ app.listen(PORT, () => {
   console.log(`  Talking to Paygate API at:     ${paygate.API_URL}`);
   console.log(`  Gateway provider:              ${paygate.PROVIDER}`);
   console.log(`  Merchant API key:              ${paygate.KEY_ID || '(not set — see .env)'}\n`);
-});
-
-app.get('/demo-store', (_req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
-app.get('/demo-store/', (_req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });

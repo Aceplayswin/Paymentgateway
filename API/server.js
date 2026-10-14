@@ -45,21 +45,37 @@ app.use('/api/settings', settingsRoutes);
 app.use('/api/developer', developerRoutes);
 app.use('/api/admin', adminRoutes);
 
-app.get('/api/health', (_req, res) => {
-  res.status(200).json({ status: 'ok' });
+const PORT = Number(process.env.PORT) || 3000;
+
+// Liveness for nginx / deploy health checks. Must not depend on DB so a
+// brief MySQL blip cannot take the process offline and cause 502s.
+app.get('/api/health', async (_req, res) => {
+  try {
+    const conn = await pool.getConnection();
+    conn.release();
+    res.status(200).json({ status: 'ok', db: true });
+  } catch (err) {
+    res.status(200).json({
+      status: 'ok',
+      db: false,
+      dbError: err.message,
+    });
+  }
 });
 
-const PORT = process.env.PORT;
+// Listen first so the process stays up for nginx even if MySQL is slow/down.
+// DB is verified in the background; routes that need it will still fail until
+// the pool can connect.
+app.listen(PORT, () => {
+  console.log(`Server is running on port ${PORT}`);
+});
 
-pool.getConnection()
+pool
+  .getConnection()
   .then((conn) => {
     conn.release();
     console.log('Database Connected');
-    app.listen(PORT, () => {
-      console.log(`Server is running on port ${PORT}`);
-    });
   })
   .catch((err) => {
-    console.error('Database connection failed:', err.message);
-    process.exit(1);
+    console.error('Database connection failed (server still listening):', err.message);
   });

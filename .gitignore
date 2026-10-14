@@ -17,6 +17,7 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
+lerna-debug.log*
 
 # Runtime / process files
 pids/
@@ -26,10 +27,12 @@ pids/
 
 # Build and coverage output
 dist/
+dist-ssr/
 build/
 coverage/
 .nyc_output/
 *.tsbuildinfo
+*.local
 
 # Cache directories
 .cache/
@@ -49,8 +52,13 @@ Desktop.ini
 !.vscode/settings.json
 !.vscode/tasks.json
 !.vscode/launch.json
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
 *.swp
 *.swo
+*.sw?
 *~
 
 # Test reports

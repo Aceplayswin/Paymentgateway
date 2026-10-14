@@ -262,7 +262,8 @@ const getSettlementTrend = async (scope) => {
             SUM(CASE WHEN settlement_status IN ('failed', 'pending') THEN 1 ELSE 0 END) AS delayed_count
      FROM settlements
      WHERE settlement_date >= DATE_SUB(CURDATE(), INTERVAL 4 WEEK) ${scope.sql}
-     GROUP BY WEEK(settlement_date, 1)
+     GROUP BY WEEK(settlement_date, 1),
+              CONCAT('W', WEEK(settlement_date, 1) - WEEK(DATE_SUB(CURDATE(), INTERVAL 4 WEEK), 1) + 1)
      ORDER BY WEEK(settlement_date, 1)
      LIMIT 4`,
     scope.values

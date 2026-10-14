@@ -1,0 +1,195 @@
+# CI/CD for the frontend and the API.
+#
+# A push to the production branch that touches them checks both, then
+# uploads exactly three things to the server: FE/, API/ and .gitignore.
+# The Vite FE is built there beside the live one, the API's npm deps are
+# installed with the server's Node, and everything is switched in only when
+# all of that passes; then the public URLs are checked and the previous
+# version is put back if any fails. demo-store/ and the rest of the repo
+# are never uploaded.
+#
+# Pull requests get the checks only.
+
+name: Deploy FE + API
+
+on:
+  push:
+    # A merge to main is a push, so this is the production release.
+    branches: [main]
+    paths:
+      - "FE/**"
+      - "API/**"
+      - ".gitignore"
+      - ".github/workflows/deploy.yml"
+      - ".github/scripts/deploy-remote.sh"
+  pull_request:
+    branches: [main]
+    paths:
+      - "FE/**"
+      - "API/**"
+      - ".gitignore"
+      - ".github/workflows/deploy.yml"
+      - ".github/scripts/deploy-remote.sh"
+  # Manual run: deploys whichever branch is picked, like ./deploy.sh <branch>.
+  workflow_dispatch:
+
+# Production runs queue one after another in push order; a newer queued run
+# replaces an older queued one. Pull request runs cancel their own stale runs.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || 'production' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build ${{ matrix.app }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [FE]
+    defaults:
+      run:
+        working-directory: ${{ matrix.app }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: ${{ matrix.app }}/package-lock.json
+
+      # No .env here: the FE builds without one (VITE_API_BASE_URL is optional
+      # and empty means same-origin /api). This is a compile check; the build
+      # that goes live happens on the server, with its env files.
+      - run: npm ci --no-audit --no-fund
+      - run: npm run build
+
+  check-api:
+    name: Check API
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: API
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: API/package-lock.json
+
+      # Dependencies resolve and every JS file parses. No live server start:
+      # with no .env the API would try the configured database, and CI must
+      # not reach it. The server installs deps again with the Node that will
+      # run it.
+      - run: npm ci --no-audit --no-fund
+      - run: |
+          find . -type f -name '*.js' \
+            ! -path './node_modules/*' \
+            -print0 | xargs -0 -n1 node --check
+
+  deploy:
+    name: Deploy to production
+    needs: [build, check-api]
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment:
+      name: production
+      url: ${{ vars.FE_URL || 'https://www.paygate.example/' }}
+    env:
+      APP_DIR: ${{ vars.APP_DIR || '/var/www/paygate' }}
+      FE_URL: ${{ vars.FE_URL || 'https://www.paygate.example/' }}
+      API_URL: ${{ vars.API_URL || 'https://api.paygate.example/api/health' }}
+      PM2_NAMES: ${{ vars.PM2_NAMES }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up SSH
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ vars.SSH_USER || 'ubuntu' }}
+        run: |
+          if [ -z "$SSH_PRIVATE_KEY" ] || [ -z "$SSH_HOST" ]; then
+            echo "::error::Set the SSH_PRIVATE_KEY and SSH_HOST repository secrets"
+            exit 1
+          fi
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          if [ -n "$SSH_KNOWN_HOSTS" ]; then
+            printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          else
+            echo "::warning::SSH_KNOWN_HOSTS is not set, so this run trusts whatever host key $SSH_HOST presents"
+            ssh-keyscan -H "$SSH_HOST" > ~/.ssh/known_hosts
+          fi
+          cat > ~/.ssh/config <<EOF
+          Host prod
+            HostName $SSH_HOST
+            User $SSH_USER
+            IdentityFile ~/.ssh/deploy_key
+            IdentitiesOnly yes
+            BatchMode yes
+            ServerAliveInterval 30
+          EOF
+
+      # The staging folders belong to this workflow, so --delete is safe
+      # there. Dependencies, build output and env files are the server's own.
+      # API/uploads/ goes up too, but the checkout holds only placeholders;
+      # what merchants uploaded lives on the server alone.
+      - name: Upload to the server's staging area
+        run: |
+          ssh prod "command -v rsync >/dev/null || { echo 'rsync is not installed on the server: sudo apt-get install -y rsync'; exit 1; }; mkdir -p '$APP_DIR/.deploy/FE' '$APP_DIR/.deploy/API' '$APP_DIR/.deploy/root'"
+          rsync -az --delete \
+            --exclude=/node_modules/ --exclude=/dist/ \
+            --include=/.env.example --exclude=/.env --exclude='/.env.*' \
+            FE/ "prod:$APP_DIR/.deploy/FE/"
+          rsync -az --delete \
+            --exclude=/node_modules/ \
+            --include=/.env.example --exclude=/.env --exclude='/.env.*' \
+            API/ "prod:$APP_DIR/.deploy/API/"
+          rsync -az .gitignore "prod:$APP_DIR/.deploy/root/"
+
+      # Production environment secrets, one file each. Written before the
+      # server build, which copies the live .env into the staged app.
+      # FE_ENV -> FE/.env, API_ENV -> API/.env.
+      - name: Install env files
+        env:
+          FE_ENV: ${{ secrets.FE_ENV }}
+          API_ENV: ${{ secrets.API_ENV }}
+        run: |
+          if [ -z "$FE_ENV" ] || [ -z "$API_ENV" ]; then
+            echo "::error::Set FE_ENV and API_ENV on the production environment"
+            exit 1
+          fi
+          install -d -m 700 "$RUNNER_TEMP/dotenv"
+          printf '%s\n' "$FE_ENV" > "$RUNNER_TEMP/dotenv/fe"
+          printf '%s\n' "$API_ENV" > "$RUNNER_TEMP/dotenv/api"
+          ssh prod "mkdir -p '$APP_DIR/FE' '$APP_DIR/API'"
+          scp "$RUNNER_TEMP/dotenv/fe" "prod:$APP_DIR/FE/.env"
+          scp "$RUNNER_TEMP/dotenv/api" "prod:$APP_DIR/API/.env"
+          ssh prod "chmod 600 '$APP_DIR/FE/.env' '$APP_DIR/API/.env'"
+
+      - name: Build on the server and switch over
+        id: switch
+        run: ssh prod "PM2_NAMES='$PM2_NAMES' bash -s -- deploy '$APP_DIR' '$GITHUB_SHA'" < .github/scripts/deploy-remote.sh
+
+      - name: Health check
+        run: |
+          for url in "$FE_URL" "$API_URL"; do
+            curl -fsSL -o /dev/null --retry 12 --retry-delay 5 --retry-all-errors --max-time 30 \
+              -w "%{http_code} %{url_effective}\n" "$url"
+          done
+
+      # Only after a switch that went through: a failed build never touched
+      # the live site, and a switch that fails part-way restores on its own.
+      - name: Roll back
+        if: failure() && steps.switch.outcome == 'success'
+        run: ssh prod "PM2_NAMES='$PM2_NAMES' bash -s -- rollback '$APP_DIR'" < .github/scripts/deploy-remote.sh

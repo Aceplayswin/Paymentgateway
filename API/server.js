@@ -45,6 +45,10 @@ app.use('/api/settings', settingsRoutes);
 app.use('/api/developer', developerRoutes);
 app.use('/api/admin', adminRoutes);
 
+app.get('/api/health', (_req, res) => {
+  res.status(200).json({ status: 'ok' });
+});
+
 const PORT = process.env.PORT;
 
 pool.getConnection()

@@ -30,6 +30,11 @@ app.use(express.urlencoded({ extended: true }));
 // server — gets bounced to the storefront instead of a blank "Cannot GET /".
 app.get('/', (_req, res) => res.redirect('/demo-store/'));
 
+// Deploy health check (used by .github/workflows/deploy.yml).
+app.get('/demo-store/api/health', (_req, res) => {
+  res.status(200).json({ status: 'ok' });
+});
+
 app.use('/demo-store', express.static(path.join(__dirname, 'public')));
 
 // Serve the storefront landing page for both the bare and trailing-slash forms

@@ -8,20 +8,20 @@
 #   deploy   <app_dir> <sha>   build what the workflow staged, then switch it live
 #   rollback <app_dir>         put back what the last deploy replaced
 #
-# Before `deploy` runs, the workflow has rsynced the commit's FE/ and API/
-# into <app_dir>/.deploy/<name>/, and .gitignore into <app_dir>/.deploy/root/.
-# The Vite FE builds there beside the live one, and the API's npm deps are
-# installed with the live Node; nothing live is touched unless all of that
-# passes. A Vite `dist/` folder can be moved after `npm run build`, so the
-# FE switch is a rename, not a rebuild in place.
+# Before `deploy` runs, the workflow has rsynced the commit's FE/, API/ and
+# demo-store/ into <app_dir>/.deploy/<name>/, and .gitignore into
+# <app_dir>/.deploy/root/. The Vite FE builds there beside the live one, and
+# each Node app's npm deps are installed with the live Node; nothing live is
+# touched unless all of that passes. A Vite `dist/` folder can be moved after
+# `npm run build`, so the FE switch is a rename, not a rebuild in place.
 #
 # Files in the live folders that exist only on this box and must survive
 # every deploy:
 #   - .env, .env.production ...: gitignored, so each FE build copies them in
 #     from the live app rather than expecting them in the upload;
 #   - API/: uploads/ (KYC documents) and gitignored credential files that can
-#     sit anywhere in the tree. The API deletes only files an earlier deploy
-#     put there (see switch_api).
+#     sit anywhere in the tree. Node apps delete only files an earlier deploy
+#     put there (see switch_node_app).
 #
 # Everything is in functions and main runs on the last line: bash reads this
 # script from stdin, and a command that reads stdin (npm, pm2) would
@@ -29,8 +29,10 @@
 
 set -Eeuo pipefail
 
+# Vite apps: npm ci + npm run build, then swap dist/ and node_modules/.
 APPS=(FE)
-API=API
+# Plain Node apps: npm ci, syntax-check, then manifest-based code switch.
+NODE_APPS=(API demo-store)
 ROOT_FILES=(.gitignore)
 # Moved into place whole, so each one changes in a single rename.
 SWAPPED=(dist node_modules)
@@ -59,10 +61,19 @@ pm2_names_for() {
   ' "$1"
 }
 
-# Fills PM2 with every process to reload: anything already running from FE/
-# (optional — nginx often serves FE/dist statically) and the API server.
-# A folder with no process gets the name this box uses, and apply_pm2 starts
-# it. PM2_NAMES (a repository variable, space-separated) overrides the lookup.
+# Default pm2 process name for a folder when none is already registered.
+default_pm2_name() {
+  case "$1" in
+    FE) echo paygate-fe ;;
+    API) echo paygate-api ;;
+    demo-store) echo demo-store ;;
+    *) return 1 ;;
+  esac
+}
+
+# Fills PM2 with every process to reload: FE, API and demo-store. A folder
+# with no process gets the name this box uses, and apply_pm2 starts it.
+# PM2_NAMES (a repository variable, space-separated) overrides the lookup.
 resolve_pm2_names() {
   PM2=()
   if [ -n "${PM2_NAMES:-}" ]; then
@@ -70,24 +81,16 @@ resolve_pm2_names() {
     return
   fi
   local dir found
-  for dir in "${APPS[@]}"; do
+  for dir in "${APPS[@]}" "${NODE_APPS[@]}"; do
     found=$(pm2_names_for "$APP_DIR/$dir")
     if [ -n "$found" ]; then
       # One name per line; split on purpose.
       # shellcheck disable=SC2206
       PM2+=($found)
     else
-      # FE is usually nginx-served from dist/; only start under pm2 when asked.
-      :
+      PM2+=("$(default_pm2_name "$dir")")
     fi
   done
-  found=$(pm2_names_for "$APP_DIR/$API")
-  if [ -n "$found" ]; then
-    # shellcheck disable=SC2206
-    PM2+=($found)
-  else
-    PM2+=(paygate-api)
-  fi
 }
 
 # online / launching / stopped / errored, or empty when pm2 has no such process.
@@ -104,9 +107,9 @@ pm2_status() {
   ' "$1"
 }
 
-# A name that is not already in pm2. The API name is the one this script
-# knows how to create; anything else has to be started on the server once,
-# and later deploys only reload it.
+# A name that is not already in pm2. The three app names are the ones this
+# script knows how to create; anything else has to be started on the server
+# once, and later deploys only reload it.
 start_pm2() {
   local name="$1"
   case "$name" in
@@ -114,7 +117,10 @@ start_pm2() {
       pm2 start npm --name "$name" --cwd "$APP_DIR/FE" -- run preview -- --host 0.0.0.0 --port 4173
       ;;
     paygate-api)
-      pm2 start npm --name "$name" --cwd "$APP_DIR/$API" -- start
+      pm2 start npm --name "$name" --cwd "$APP_DIR/API" -- start
+      ;;
+    demo-store)
+      pm2 start npm --name "$name" --cwd "$APP_DIR/demo-store" -- start
       ;;
     *)
       die "pm2 process '$name' is not running, and this deploy does not know how to start it. Start it once on the server; later deploys will reload it."
@@ -150,7 +156,9 @@ apply_pm2() {
 # True when the last switch left something to go back to.
 have_previous() {
   local app d
-  [ -d "$PREV/$API" ] && return 0
+  for app in "${NODE_APPS[@]}"; do
+    if [ -d "$PREV/$app" ]; then return 0; fi
+  done
   for app in "${APPS[@]}"; do
     for d in "${SWAPPED[@]}"; do
       if [ -e "$PREV/$app/$d" ]; then return 0; fi
@@ -177,17 +185,18 @@ switch_app() {
   done
 }
 
-# The API has no build: its code is what runs, so the switch copies it over.
-# Gitignored files can sit anywhere in its tree, so nothing is deleted by
-# folder. Each deploy records the files it uploaded (.deploy/manifests/API)
-# and removes only those the previous deploy recorded and this one dropped.
-# Every live file it overwrites or removes is copied to $PREV/API first, with
-# a list of the files it adds, so restore_api can undo it exactly.
-# node_modules/ is the server's own (like a venv) and is never taken from the
-# staged tree.
-switch_api() {
-  local stage="$DEPLOY/$API" live="$APP_DIR/$API" prev="$PREV/$API"
-  local manifest="$DEPLOY/manifests/$API" new="$DEPLOY/manifests/$API.new" old f
+# A Node app has no build: its code is what runs, so the switch copies it
+# over. Gitignored files can sit anywhere in its tree, so nothing is deleted
+# by folder. Each deploy records the files it uploaded
+# (.deploy/manifests/<app>) and removes only those the previous deploy
+# recorded and this one dropped. Every live file it overwrites or removes is
+# copied to $PREV/<app> first, with a list of the files it adds, so
+# restore_node_app can undo it exactly. node_modules/ is the server's own
+# and is never taken from the staged tree.
+switch_node_app() {
+  local app="$1"
+  local stage="$DEPLOY/$app" live="$APP_DIR/$app" prev="$PREV/$app"
+  local manifest="$DEPLOY/manifests/$app" new="$DEPLOY/manifests/$app.new" old f
   mkdir -p "$DEPLOY/manifests" "$prev/files"
   (cd "$stage" && find . -type f ! -path './node_modules/*' | sed 's|^\./||' | LC_ALL=C sort) > "$new"
   old=/dev/null
@@ -214,32 +223,54 @@ switch_api() {
   done < "$prev/dropped"
   mv -f "$new" "$manifest"
 
-  # KYC uploads are written here and nothing else guarantees the API process
-  # can write into the folder.
-  mkdir -p "$live/uploads/kyc"
-  chmod -R u+rwX "$live/uploads"
+  if [ "$app" = API ]; then
+    # KYC uploads are written here and nothing else guarantees the API
+    # process can write into the folder.
+    mkdir -p "$live/uploads/kyc"
+    chmod -R u+rwX "$live/uploads"
+  fi
 }
 
-restore_api() {
-  local prev="$PREV/$API" live="$APP_DIR/$API" f
+restore_node_app() {
+  local app="$1"
+  local prev="$PREV/$app" live="$APP_DIR/$app" f
   if [ ! -d "$prev" ]; then return 0; fi
   if [ -d "$prev/files" ]; then rsync -a --checksum "$prev/files/" "$live/"; fi
   if [ -f "$prev/added" ]; then
     while IFS= read -r f; do rm -f "$live/$f"; done < "$prev/added"
   fi
-  rm -f "$DEPLOY/manifests/$API.new"
+  rm -f "$DEPLOY/manifests/$app.new"
   if [ -f "$prev/manifest" ]; then
-    mv -f "$prev/manifest" "$DEPLOY/manifests/$API"
+    mv -f "$prev/manifest" "$DEPLOY/manifests/$app"
   else
-    rm -f "$DEPLOY/manifests/$API"
+    rm -f "$DEPLOY/manifests/$app"
   fi
   rm -rf "$prev"
 }
 
+# Prepare a Node app for switch: copy live env into the stage, parse-check
+# every JS file, npm ci, and sync node_modules into the live folder (not
+# rolled back — same role as a Python venv).
+prepare_node_app() {
+  local app="$1"
+  local stage="$DEPLOY/$app" live="$APP_DIR/$app"
+
+  log "Checking $app with $(node --version 2>&1)"
+  find "$stage" -type f -name '*.js' ! -path '*/node_modules/*' -print0 \
+    | xargs -0 -n1 node --check
+
+  log "Installing $app dependencies"
+  find "$stage" -maxdepth 1 -type f -name '.env*' ! -name .env.example -delete
+  find "$live" -maxdepth 1 -type f -name '.env*' ! -name .env.example -exec cp -p {} "$stage/" \;
+  (cd "$stage" && npm ci --omit=dev --no-audit --no-fund)
+  mkdir -p "$live"
+  rsync -a --checksum --delete "$stage/node_modules/" "$live/node_modules/"
+}
+
 # Puts back what the last switch moved into $PREV: the FE's dist and
-# node_modules, the API's code, and the root files. Not rolled back: FE
-# source files (only their builds run), and packages npm installed into the
-# API's node_modules. Used by a failed switch and by `rollback`.
+# node_modules, each Node app's code, and the root files. Not rolled back:
+# FE source files (only their builds run), and packages npm installed into
+# each Node app's node_modules. Used by a failed switch and by `rollback`.
 restore() {
   local app d f
   for app in "${APPS[@]}"; do
@@ -251,7 +282,9 @@ restore() {
       rm -rf "$DEPLOY/discard"
     done
   done
-  restore_api
+  for app in "${NODE_APPS[@]}"; do
+    restore_node_app "$app"
+  done
   for f in "${ROOT_FILES[@]}"; do
     if [ -f "$PREV/root/$f" ]; then mv -f "$PREV/root/$f" "$APP_DIR/$f"; fi
   done
@@ -269,17 +302,16 @@ on_switch_error() {
 deploy() {
   local sha="$1" app stage live envs f
 
-  for app in "${APPS[@]}" "$API"; do
+  for app in "${APPS[@]}" "${NODE_APPS[@]}"; do
     [ -d "$DEPLOY/$app" ] || die "Nothing staged for $app in $DEPLOY/$app"
     if [ ! -d "$APP_DIR/$app" ]; then
       log "Creating $APP_DIR/$app"
       mkdir -p "$APP_DIR/$app"
     fi
   done
-  for app in "${APPS[@]}"; do
+  for app in "${APPS[@]}" "${NODE_APPS[@]}"; do
     [ -f "$DEPLOY/$app/package.json" ] || die "$DEPLOY/$app has no package.json"
   done
-  [ -f "$DEPLOY/$API/package.json" ] || die "$DEPLOY/$API has no package.json"
   for f in "${ROOT_FILES[@]}"; do
     [ -f "$DEPLOY/root/$f" ] || die "$f was not staged"
   done
@@ -291,7 +323,7 @@ deploy() {
   for name in "${PM2[@]}"; do
     pm2 describe "$name" >/dev/null 2>&1 && continue
     case "$name" in
-      paygate-fe|paygate-api) ;;
+      paygate-fe|paygate-api|demo-store) ;;
       *) die "pm2 process '$name' is not running, and this deploy does not know how to start it. Start it once on the server; later deploys will reload it." ;;
     esac
   done
@@ -308,20 +340,9 @@ deploy() {
     [ -d "$stage/dist" ] || die "$app build produced no dist/"
   done
 
-  # The API's only pre-switch step: every staged JS file must parse under the
-  # Node that will run it.
-  log "Checking the API with $(node --version 2>&1)"
-  find "$DEPLOY/$API" -type f -name '*.js' ! -path '*/node_modules/*' -print0 \
-    | xargs -0 -n1 node --check
-
-  # node_modules is the server's own and is not rolled back: new packages go
-  # in before the new code, which the old code tolerates.
-  log "Installing API dependencies"
-  find "$DEPLOY/$API" -maxdepth 1 -type f -name '.env*' ! -name .env.example -delete
-  find "$APP_DIR/$API" -maxdepth 1 -type f -name '.env*' ! -name .env.example -exec cp -p {} "$DEPLOY/$API/" \;
-  (cd "$DEPLOY/$API" && npm ci --omit=dev --no-audit --no-fund)
-  mkdir -p "$APP_DIR/$API"
-  rsync -a --checksum --delete "$DEPLOY/$API/node_modules/" "$APP_DIR/$API/node_modules/"
+  for app in "${NODE_APPS[@]}"; do
+    prepare_node_app "$app"
+  done
 
   log "Switching to $sha"
   rm -rf "$PREV"
@@ -330,7 +351,9 @@ deploy() {
   for app in "${APPS[@]}"; do
     switch_app "$app"
   done
-  switch_api
+  for app in "${NODE_APPS[@]}"; do
+    switch_node_app "$app"
+  done
   for f in "${ROOT_FILES[@]}"; do
     if [ -f "$APP_DIR/$f" ]; then cp -p "$APP_DIR/$f" "$PREV/root/$f"; fi
     install_file "$DEPLOY/root/$f" "$APP_DIR/$f"
@@ -345,7 +368,7 @@ deploy() {
 rollback() {
   have_previous || die "Nothing to roll back to in $PREV"
   resolve_pm2_names
-  log "Rolling back FE and the API to the previous version"
+  log "Rolling back FE, API and demo-store to the previous version"
   restore
   printf '%s rolled back\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$DEPLOY/history.log"
 }

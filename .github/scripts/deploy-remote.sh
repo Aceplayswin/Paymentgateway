@@ -235,6 +235,15 @@ restore_node_app() {
   local app="$1"
   local prev="$PREV/$app" live="$APP_DIR/$app" f
   if [ ! -d "$prev" ]; then return 0; fi
+  # No package.json before the switch means there was no app to go back to:
+  # undoing it would delete every file the deploy added, package.json
+  # included, and leave pm2 crash-looping on `npm start`. Keep the new code.
+  if [ -f "$prev/added" ] && grep -qxF package.json "$prev/added"; then
+    log "warning: $app had no package.json before this deploy, so there is no previous version to restore; keeping the new one"
+    rm -f "$DEPLOY/manifests/$app.new"
+    rm -rf "$prev"
+    return 0
+  fi
   if [ -d "$prev/files" ]; then rsync -a --checksum "$prev/files/" "$live/"; fi
   if [ -f "$prev/added" ]; then
     while IFS= read -r f; do rm -f "$live/$f"; done < "$prev/added"
